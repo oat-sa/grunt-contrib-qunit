@@ -4,7 +4,6 @@ QUnit.test('basic test', function(assert) {
   assert.ok(true, 'this had better work.');
 });
 
-
 QUnit.test('can access the DOM', function(assert) {
   assert.expect(1);
   var fixture = document.getElementById('qunit-fixture');

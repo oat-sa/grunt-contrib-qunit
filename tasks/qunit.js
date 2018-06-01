@@ -12,9 +12,10 @@
 var path = require('path');
 var url = require('url');
 
+var EventEmitter = require('events');
+var puppeteer = require('puppeteer');
+
 module.exports = function(grunt) {
-  // External lib.
-  var phantomjs = require('grunt-lib-phantomjs').init(grunt);
 
   // Keep track of the last-started module and test. Additionally, keep track
   // of status for individual test files and the entire test suite.
@@ -144,20 +145,28 @@ module.exports = function(grunt) {
   }
 
   // QUnit hooks.
-  phantomjs.on('qunit.begin', function() {
+  //qUnitEmitter.on('qunit.begin',
+  function qUnitBegin() {
     currentStatus = createStatus();
-  });
+  }
 
-  phantomjs.on('qunit.moduleStart', function(name) {
+  //qUnitEmitter.on('qunit.moduleStart',
+
+  function qUnitModuleStart(name) {
     unfinished[name] = true;
     currentModule = name;
-  });
+  }
 
-  phantomjs.on('qunit.moduleDone', function(name) {
+  //qUnitEmitter.on('qunit.moduleDone',
+
+  function qUnitModuleDone(name) {
     delete unfinished[name];
-  });
+  }
 
-  phantomjs.on('qunit.log', function(result, actual, expected, message, source, todo) {
+  //qUnitEmitter.on('qunit.log',
+
+  function qUnitLog(result, actual, expected, message, source, todo) {
+
     if (!result && !todo) {
       failedAssertions.push({
         actual: actual,
@@ -167,14 +176,18 @@ module.exports = function(grunt) {
         testName: currentTest
       });
     }
-  });
+  }
 
-  phantomjs.on('qunit.testStart', function(name) {
+  //qUnitEmitter.on('qunit.testStart',
+
+ function qUnitTestStart(name) {
     currentTest = (currentModule ? currentModule + ' - ' : '') + name;
     grunt.verbose.write(currentTest + '...');
-  });
+  }
 
-  phantomjs.on('qunit.testDone', function(name, failed, passed, total, runtime, skipped, todo) {
+  //qUnitEmitter.on('qunit.testDone',
+
+  function qUnitTestDone(name, failed, passed, total, runtime, skipped, todo) {
     var testPassed = failed > 0 ? todo : !todo;
 
     if (skipped) {
@@ -202,10 +215,12 @@ module.exports = function(grunt) {
     } else {
       grunt.log.write('F'.red);
     }
-  });
+  }
 
-  phantomjs.on('qunit.done', function(failed, passed, total, runtime) {
-    phantomjs.halt();
+  //qUnitEmitter.on('qunit.done',
+
+    function qUnitDone(failed, passed, total, runtime) {
+    //phantomjs.halt();
 
     currentStatus.runtime += runtime;
     currentStatus.assertions.passed += passed;
@@ -222,17 +237,17 @@ module.exports = function(grunt) {
     }
 
     mergeStatus(status, currentStatus);
-  });
+  }
 
   // Re-broadcast qunit events on grunt.event.
-  phantomjs.on('qunit.*', function() {
-    var args = [this.event].concat(grunt.util.toArray(arguments));
-    grunt.event.emit.apply(grunt.event, args);
-  });
-
+  //phantomjs.on('qunit.*', function() {
+    //var args = [this.event].concat(grunt.util.toArray(arguments));
+    //grunt.event.emit.apply(grunt.event, args);
+  //});
+/*
   // Built-in error handlers.
   phantomjs.on('fail.load', function(url) {
-    phantomjs.halt();
+    //phantomjs.halt();
     grunt.verbose.write('...');
     grunt.event.emit('qunit.fail.load', url);
     grunt.log.error('PhantomJS unable to load \'' + url + '\' URI.');
@@ -254,6 +269,7 @@ module.exports = function(grunt) {
   phantomjs.on('error.onError', function (msg, stackTrace) {
     grunt.event.emit('qunit.error.onError', msg, stackTrace);
   });
+  */
 
   grunt.registerMultiTask('qunit', 'Run QUnit unit tests in a headless PhantomJS instance.', function() {
     // Merge task-specific and/or target-specific options with these defaults.
@@ -261,7 +277,7 @@ module.exports = function(grunt) {
       // Default PhantomJS timeout.
       timeout: 5000,
       // QUnit-PhantomJS bridge file to be injected.
-      inject: asset('phantomjs/bridge.js'),
+      inject: asset('chrome/bridge.js'),
       // Explicit non-file URLs to test.
       urls: [],
       force: false,
@@ -283,7 +299,9 @@ module.exports = function(grunt) {
       });
     } else {
       // Combine any specified URLs with src files.
-      urls = options.urls.concat(this.filesSrc);
+      urls = options.urls.concat(this.filesSrc.map(function(testFile){
+            return 'file://' + path.resolve(testFile);
+      }));
     }
 
     function appendToUrls (queryParam, value) {
@@ -323,7 +341,7 @@ module.exports = function(grunt) {
 
     // Pass-through console.log statements.
     if (options.console) {
-      phantomjs.on('console', console.log.bind(console));
+      //phantomjs.on('console', console.log.bind(console));
     }
 
     // Process each filepath in-order.
@@ -335,7 +353,52 @@ module.exports = function(grunt) {
 
       // Launch PhantomJS.
       grunt.event.emit('qunit.spawn', url);
-      phantomjs.spawn(url, {
+
+        //console.log('OPTIONS');
+        //console.log(options);
+        //console.log('/OPTIONS');
+
+        puppeteer.launch().then( browser => {
+            return browser.newPage().then( page => {
+
+                var qUnitEmitter = new EventEmitter();
+
+                if(options.console){
+                    page.on('console', consoleMessage => {
+                        var type = (typeof console[consoleMessage[type]] === 'function') ? consoleMessage[type] : 'log';
+                        console[type].call(console, consoleMessage.text, ...consoleMessage.args);
+                    });
+                }
+                page.on('error', err =>  console.log('GOT AN ERROR', err));
+                page.on('pageerror', err => console.log('GOT A PAGE ERROR', err));
+
+                page.exposeFunction('onQUnitEvent', (event, params) => {
+                    qUnitEmitter.emit(event, ...params);
+                    grunt.event.emit(event, ...params);
+                });
+
+                qUnitEmitter.on('qunit.begin', qUnitBegin);
+                qUnitEmitter.on('qunit.testStart', qUnitTestStart);
+                qUnitEmitter.on('qunit.testDone', qUnitTestDone);
+                qUnitEmitter.on('qunit.moduleStart', qUnitModuleStart);
+                qUnitEmitter.on('qunit.moduleDone', qUnitModuleDone);
+                qUnitEmitter.on('qunit.done', qUnitDone);
+                qUnitEmitter.on('qunit.log', qUnitLog);
+
+
+                return page.goto(url)
+                    .then(() =>  page.addScriptTag({ content : grunt.file.read(options.inject) }))
+                    .then(() => page.waitForFunction('window.done === true', { timeout : options.timeout}))
+                    .then(() => browser.close() );
+            });
+        })
+        .then( () => next() )
+        .catch( err => {
+            console.error(err);
+            done();
+        });
+
+      /*phantomjs.spawn(url, {
         // Additional PhantomJS options.
         options: options,
         // Do stuff when done.
@@ -348,7 +411,7 @@ module.exports = function(grunt) {
             next();
           }
         }
-      });
+      });*/
     },
     // All tests have been run.
     function() {

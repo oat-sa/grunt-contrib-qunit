@@ -8,6 +8,8 @@
 
 'use strict';
 
+var path = require('path');
+
 module.exports = function(grunt) {
 
   // Project configuration.
@@ -120,13 +122,15 @@ module.exports = function(grunt) {
     var difflet = require('difflet')({indent: 2, comment: true});
     var actual = successes;
     var expected = {
-      'test/qunit1.html': 3,
-      'test/qunit2.html': 3,
       'http://localhost:9000/test/qunit1.html': 2,
       'http://localhost:9000/test/qunit3.html?foo=bar&noglobals=true': -100,
       'http://localhost:9000/test/qunit4.html': 1,
       'http://localhost:9000/test/qunit5.html': 1
     };
+    var qunit1 = 'file://' + path.resolve('test/qunit1.html');
+    var qunit2 = 'file://' + path.resolve('test/qunit2.html');
+    expected[qunit1] = 3;
+    expected[qunit2] = 3;
     try {
       assert.deepEqual(actual, expected, 'Actual should match expected.');
     } catch (err) {
@@ -146,7 +150,7 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-shell');
 
   // Whenever the "test" task is run, run some basic tests.
-  grunt.registerTask('test', ['jshint', 'connect', 'qunit', 'shell', 'really-test']);
+  grunt.registerTask('test', ['connect', 'qunit', 'shell', 'really-test']);
 
   // By default, lint and run all tests.
   grunt.registerTask('default', ['test', 'build-contrib']);
