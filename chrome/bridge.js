@@ -31,7 +31,6 @@
     window.onQUnitEvent(eventName, params);
   }
 
-  sendMessage('foo', 'bar', 'baz');
 
   // These methods connect QUnit to PhantomJS.
   QUnit.log(function(obj) {
@@ -76,6 +75,8 @@
 
   QUnit.done(function(obj) {
     sendMessage('qunit.done', obj.failed, obj.passed, obj.total, obj.runtime);
+
+    //quickest way to inform the wait end...
     window.done = true;
   });
 }));
